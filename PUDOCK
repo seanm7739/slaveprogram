@@ -1,0 +1,44 @@
+#run autogrid and autodock $1=ligand $2=receptor 
+#$3=prl, all, rand $4=prh, loop number
+#by seanm 2014-1-16
+read offset file
+
+lig=$(echo $file | cut -d ' ' -f 1)   #ligand
+rec=$(echo $file | cut -d ' ' -f 2)   #receptor
+par1=$(echo $file | cut -d ' ' -f 3) #prl or method
+par2=$(echo $file | cut -d ' ' -f 4) #prh or number
+date=$(echo $file | cut -d ' ' -f 5)
+
+name1=$lig-$rec\_$par1-$par2
+name2=$rec-$lig\_$par1-$par2
+workdir=/tmp/$date-$name1
+nfs=/mnt/streaming-mod
+outdir=$nfs/result/PUDOCK/$date
+indir=$nfs/input/PUDOCK
+
+mkdir $workdir
+cp $indir/$lig.pdbqt $indir/$rec.pdbqt $indir/$name2.gpf $indir/$name1.dpf $workdir
+cd $workdir
+
+#echo start autogrid...
+/usr/bin/time -o time\_$name1.txt -a -f "Real time: %e\tUser time: %U\tSys time: %S\tg" autogrid4 -p $name2.gpf -l $name2.glg
+#echo autogrid time...
+#echo start autodock...
+/usr/bin/time -o time\_$name1.txt -a -f "Real time: %e\tUser time: %U\tSys time: %S\td" autodock4 -p $name1.dpf -l $name1.dlg
+#echo autodock time... 
+
+
+g=`more time_$name1.txt | grep g | cut -d ' ' -f 3 | cut -d '	'  -f 1`
+d=`more time_$name1.txt | grep d | cut -d ' ' -f 3 | cut -d '	'  -f 1`
+gd=`perl -E "say $g+$d"`
+le=`more $name1.dlg | grep -A 3 "Rank | Sub- | Run  | Binding   | Cluster | Reference       | Grep" | grep RANKING | tr -s ' ' | cut -d ' ' -f 5`
+
+echo $name1 $le $gd $g $d > result-$name1
+
+cp $workdir/result-$name1 $workdir/$name1.dlg $workdir/time\_$name1.txt $workdir/$rec.pdbqt $outdir
+
+cat $workdir/result-$name1 >> $outdir/$date
+sync
+
+#clear temp
+rm -r $workdir
